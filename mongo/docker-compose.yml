@@ -1,0 +1,90 @@
+version: '3.7'
+services:
+#  mongodb:
+#    image: mongo:4.4.18
+#    container_name: mongodb
+#    networks:
+#    - kafka-net
+#    volumes:
+#    - mongodb_data:/data/db
+#    ports:
+#    - "27017:27017"
+  mongodb:
+    image: mongo:4.4.18
+    container_name: mongodb
+    network_mode: host
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    command: ["--replSet", "rs1"]  # Указываем, что запускается Replica Set
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  logstash:
+    image: custom-logstash
+    container_name: custom-logstash
+    volumes:
+      - ./logstash/config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./logstash/logs/radius_logs_test.log:/var/log/radius_logs_test.log
+    networks:
+      - kafka-net
+    ports:
+      - "9600:9600" # Port for Logstash monitoring interface
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper
+    networks:
+      - kafka-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    ports:
+      - "9092:9092"  # Открываем порт Kafka для внешних подключений
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://192.168.2.52:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true" # Автоматическое создание топиков
+      KAFKA_LOG_RETENTION_HOURS: 24 # Срок хранения логов в часах
+      KAFKA_NUM_PARTITIONS: 3 # Количество разделов по умолчанию
+      KAFKA_DELETE_TOPIC_ENABLE: "true" # Разрешение удаления топиков
+    depends_on:
+      - zookeeper
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - kafka-net
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka-setup
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c", "sleep 10 && /scripts/setup-topics.sh"]
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - kafka-net
+
+networks:
+  kafka-net:
+    driver: bridge
+
+volumes:
+  zookeeper_data:
+  kafka_data:
+  mongodb_data:

@@ -1,0 +1,13 @@
+version: '3.7'
+
+services:
+  app:
+    image: stepzat/logger:0.1.1
+    container_name: logger
+    environment:
+      KAFKA_BROKER: 192.168.2.52:9092
+      KAFKA_TOPIC: radius
+      LOG_FILE_PATH: /var/log/syslog
+    volumes:
+      - ./logs:/logs
+      - /var/log/syslog:/var/log/syslog:ro
